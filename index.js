@@ -5,29 +5,45 @@ import dotenv from 'dotenv';
 import uploadRoutes from "./routes/upload.js";
 import diagnoseRoutes from "./routes/diagnose.js";
 import outputRoutes from "./routes/output.js";
+import { swaggerDocs, swaggerUiSetup } from "./config/swagger.js";
 
 dotenv.config();
 
 // create express app
-const okuaniadamfuapp = express();
+const okuaniadamfoapp = express();
 
 // Apply middleware
-okuaniadamfuapp.use(cors({ credentials: true, origin: '*' }));
-okuaniadamfuapp.use(express.json({ limit: "50mb" }));
-okuaniadamfuapp.use(express.urlencoded({ limit: "50mb", extended: true }));
+okuaniadamfoapp.use(cors({ credentials: true, origin: '*' }));
+okuaniadamfoapp.use(express.json({ limit: "50mb" }));
+okuaniadamfoapp.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 // Routes
-okuaniadamfuapp.use('/upload', uploadRoutes);
-okuaniadamfuapp.use('/diagnose', diagnoseRoutes);
-okuaniadamfuapp.use('/output', outputRoutes);
+okuaniadamfoapp.use('/upload', uploadRoutes);
+okuaniadamfoapp.use('/diagnose', diagnoseRoutes);
+okuaniadamfoapp.use('/output', outputRoutes);
 
-// DB Connection
-mongoose.connect(process.env.MONGO_URI)
-.then(() => console.log('MongoDB connected'))
-.catch(err => console.error(err));
+// Redirect root path to /api-docs
+okuaniadamfoapp.get('/', (req, res) => {
+    res.redirect('/api-docs');
+  });
 
-// Listen for incoming requests
-const port = process.env.PORT || 8080;
-okuaniadamfuapp.listen(port, () => {
-  console.log(`OkuaniAdamfu App listening on port ${port}`);
-});
+// Setup Swagger UI
+okuaniadamfoapp.use('/api-docs', swaggerDocs, swaggerUiSetup);
+
+const startServer = async () => {
+  try {
+    await mongoose.connect(process.env.MONGO_URI);
+    console.log('MongoDB connected');
+
+    const port = process.env.PORT || 8080;
+    okuaniadamfoapp.listen(port, () => {
+      console.log(`OkuaniAdamfo App listening on port ${port}`);
+    });
+  } catch (err) {
+    console.error('MongoDB connection error:', err);
+    process.exit(1); // Exit app if DB connection fails
+  }
+};
+
+startServer();
+
