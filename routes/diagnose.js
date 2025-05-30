@@ -6,7 +6,7 @@ const diagnoseRoutes = express.Router();
 // POST /diagnose
 /**
  * @swagger
- * /diagnosis:
+ * /diagnose:
  *   post:
  *     summary: Create a new diagnosis entry
  *     description: Creates a diagnosis record combining voice input and/or image result with a specified language.
