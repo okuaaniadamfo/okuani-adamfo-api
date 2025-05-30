@@ -90,6 +90,6 @@ const diagnoseRoutes = express.Router();
  *                   type: string
  *                   example: "Failed to create diagnosis."
  */
-diagnoseRoutes.post('/', createDiagnosis);
+diagnoseRoutes.post('/diagose', createDiagnosis);
 
 export default diagnoseRoutes;

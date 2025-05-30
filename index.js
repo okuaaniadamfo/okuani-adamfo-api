@@ -19,7 +19,7 @@ okuaniadamfoapp.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 // Routes
 okuaniadamfoapp.use('/upload', uploadRoutes);
-okuaniadamfoapp.use('/diagnose', diagnoseRoutes);
+okuaniadamfoapp.use('/', diagnoseRoutes);
 okuaniadamfoapp.use('/output', outputRoutes);
 
 // Redirect root path to /api-docs
