@@ -6,7 +6,7 @@ import uploadRoutes from "./routes/upload.js";
 import diagnoseRoutes from "./routes/diagnose.js";
 import outputRoutes from "./routes/output.js";
 import { swaggerDocs, swaggerUiSetup } from "./config/swagger.js";
-
+import userRoutes from "./routes/user.js";
 dotenv.config();
 
 // create express app
@@ -21,6 +21,7 @@ okuaniadamfoapp.use(express.urlencoded({ limit: "50mb", extended: true }));
 okuaniadamfoapp.use('/upload', uploadRoutes);
 okuaniadamfoapp.use('/', diagnoseRoutes);
 okuaniadamfoapp.use('/output', outputRoutes);
+okuaniadamfoapp.use('/auth', userRoutes);
 
 // Redirect root path to /api-docs
 okuaniadamfoapp.get('/', (req, res) => {

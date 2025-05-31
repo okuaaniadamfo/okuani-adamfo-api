@@ -20,6 +20,7 @@ const options = {
   swaggerDefinition,
   // Paths to files containing OpenAPI definitions
   apis: [
+    './routes/user.js', // Path to user routes file
    './routes/upload.js', // Path to upload routes file
    './routes/diagnose.js', // Path to diagnose routes file
    './routes/output.js' // Path to output routes file
