@@ -13,7 +13,11 @@ dotenv.config();
 const okuaniadamfoapp = express();
 
 // Apply middleware
-okuaniadamfoapp.use(cors({ credentials: true, origin: '*' }));
+// okuaniadamfoapp.use(cors({
+//   origin: 'https://okuaniadamfo.netlify.app/',
+//   credentials: true
+// }));
+okuaniadamfoapp.use(cors({ origin: '*' }));
 okuaniadamfoapp.use(express.json({ limit: "50mb" }));
 okuaniadamfoapp.use(express.urlencoded({ limit: "50mb", extended: true }));
 
