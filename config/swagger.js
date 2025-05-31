@@ -21,9 +21,8 @@ const options = {
   // Paths to files containing OpenAPI definitions
   apis: [
    './routes/upload.js', // Path to upload routes file
-   '/routes/diagnose.js', // Path to diagnose routes file
-   './routes/output.js', // Path to output routes file
-   '/config/swaggerSchema.js' // Path to schema file
+   './routes/diagnose.js', // Path to diagnose routes file
+   './routes/output.js' // Path to output routes file
   ]
 };
 

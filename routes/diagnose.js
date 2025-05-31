@@ -6,6 +6,50 @@ const diagnoseRoutes = express.Router();
 // POST /diagnose
 /**
  * @swagger
+ * components:
+ *   schemas:
+ *     Diagnosis:
+ *       type: object
+ *       required:
+ *         - combinedResult
+ *         - language
+ *       properties:
+ *         _id:
+ *           type: string
+ *           description: The auto-generated ID of the diagnosis
+ *         voiceInput:
+ *           type: string
+ *           nullable: true
+ *         imageResult:
+ *           type: string
+ *           nullable: true
+ *         combinedResult:
+ *           type: string
+ *         localizedText:
+ *           type: string
+ *           nullable: true
+ *         audioURL:
+ *           type: string
+ *           nullable: true
+ *         language:
+ *           type: string
+ *         createdAt:
+ *           type: string
+ *           format: date-time
+ *           description: Timestamp of creation
+ *       example:
+ *         _id: "64ab12345678b1234567abcd"
+ *         voiceInput: "The leaves are turning yellow"
+ *         imageResult: "Possible nitrogen deficiency"
+ *         combinedResult: "Symptoms reported: The leaves are turning yellow. Visual analysis suggests: Possible nitrogen deficiency."
+ *         localizedText: "Localized translation here"
+ *         audioURL: "https://example.com/audio.mp3"
+ *         language: "tw"
+ *         createdAt: "2024-06-01T12:00:00.000Z"
+ */
+
+/**
+ * @swagger
  * /diagnose:
  *   post:
  *     summary: Create a new diagnosis entry
@@ -21,17 +65,24 @@ const diagnoseRoutes = express.Router();
  *             properties:
  *               voiceInput:
  *                 type: string
- *                 description: Verbal symptoms or voice input from the user
  *                 example: "Patient reports coughing and fatigue"
  *               imageResult:
  *                 type: string
- *                 description: Result of image-based analysis (e.g., crop disease or visual symptoms)
  *                 example: "Leaves show signs of powdery mildew"
+ *               combinedResult:
+ *                 type: string
+ *                 example: "Voice and image results combined"
+ *               localizedText:
+ *                 type: string
+ *                 example: "Localized text here"
+ *               audioURL:
+ *                 type: string
+ *                 example: "https://example.com/audio.mp3"
  *               language:
  *                 type: string
- *                 description: Language code of the diagnosis input (e.g., 'en', 'ak', 'ee')
  *                 example: "en"
  *             required:
+ *               - combinedResult
  *               - language
  *     responses:
  *       201:
@@ -45,30 +96,7 @@ const diagnoseRoutes = express.Router();
  *                   type: string
  *                   example: "Diagnosis created successfully."
  *                 diagnosis:
- *                   type: object
- *                   properties:
- *                     _id:
- *                       type: string
- *                       description: Unique diagnosis ID
- *                       example: "640f1234abcd5678ef901234"
- *                     voiceInput:
- *                       type: string
- *                       nullable: true
- *                       example: "Patient reports coughing and fatigue"
- *                     imageResult:
- *                       type: string
- *                       nullable: true
- *                       example: "Leaves show signs of powdery mildew"
- *                     combinedResult:
- *                       type: string
- *                       example: "Symptoms reported: Patient reports coughing and fatigue. Visual analysis suggests: Leaves show signs of powdery mildew."
- *                     language:
- *                       type: string
- *                       example: "en"
- *                     createdAt:
- *                       type: string
- *                       format: date-time
- *                       example: "2025-05-30T12:34:56.789Z"
+ *                   $ref: '#/components/schemas/Diagnosis'
  *       400:
  *         description: Bad request, missing voiceInput and imageResult
  *         content:
@@ -90,6 +118,6 @@ const diagnoseRoutes = express.Router();
  *                   type: string
  *                   example: "Failed to create diagnosis."
  */
-diagnoseRoutes.post('/diagose', createDiagnosis);
+diagnoseRoutes.post('/', createDiagnosis);
 
 export default diagnoseRoutes;
