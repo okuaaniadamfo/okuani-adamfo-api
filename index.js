@@ -9,6 +9,7 @@ import { swaggerDocs, swaggerUiSetup } from "./config/swagger.js";
 import userRoutes from "./routes/user.js";
 dotenv.config();
 
+
 // create express app
 const okuaniadamfoapp = express();
 

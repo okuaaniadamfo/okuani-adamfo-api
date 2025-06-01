@@ -6,6 +6,7 @@ const userRoutes = express.Router();
 /**
  * @swagger
  * components:
+ * 
  *   schemas:
  *     User:
  *       type: object

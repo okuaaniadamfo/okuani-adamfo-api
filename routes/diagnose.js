@@ -120,4 +120,5 @@ const diagnoseRoutes = express.Router();
  */
 diagnoseRoutes.post('/', createDiagnosis);
 
+
 export default diagnoseRoutes;
