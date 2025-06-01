@@ -3,6 +3,7 @@ import Diagnosis from "../models/diagnosis.js";
 
 const TRANSLATION_URL = process.env.GHANA_TRANSLATION_URL;
 const TTS_URL = process.env.GHANA_TTS_URL;
+const ASR_URL = process.env.GHANA_ASR_BASE_URL;
 const GHANA_NLP_API_KEY = process.env.GHANA_API_KEY;
 
 // Speaker mapping for different languages
@@ -12,13 +13,193 @@ const SPEAKER_MAPPING = {
   'ee': ['ewe_speaker_3', 'ewe_speaker_4']
 };
 
+// Supported languages for ASR
+const ASR_SUPPORTED_LANGUAGES = ['tw', 'gaa', 'dag', 'yo', 'ee', 'ki', 'ha'];
+
 // Get default speaker for a language
 const getDefaultSpeaker = (language) => {
   const speakers = SPEAKER_MAPPING[language];
   return speakers ? speakers[0] : null;
 };
 
-// Translates diagnosis result into selected local language and generates audio using TTS
+// New function: Transcribe audio to text using ASR
+export const transcribeAudio = async (req, res) => {
+  const { language } = req.query;
+  
+  if (!language) {
+    return res.status(400).json({ error: "Language parameter is required." });
+  }
+
+  if (!ASR_SUPPORTED_LANGUAGES.includes(language)) {
+    return res.status(400).json({ 
+      error: `Language '${language}' is not supported for ASR.`,
+      supportedLanguages: ASR_SUPPORTED_LANGUAGES
+    });
+  }
+
+  if (!req.file && !req.body.audioData) {
+    return res.status(400).json({ error: "Audio file or audio data is required." });
+  }
+
+  try {
+    let audioBuffer;
+    
+    // Handle different audio input formats
+    if (req.file) {
+      // If audio is uploaded as a file
+      audioBuffer = req.file.buffer;
+    } else if (req.body.audioData) {
+      // If audio is sent as base64 data
+      const base64Audio = req.body.audioData.replace(/^data:audio\/[^;]+;base64,/, '');
+      audioBuffer = Buffer.from(base64Audio, 'base64');
+    }
+
+    // Make ASR request to GhanaNLP API
+    const asrResponse = await axios.post(`${ASR_URL}?language=${language}`, audioBuffer, {
+      headers: {
+        'Content-Type': 'audio/mpeg',
+        'Cache-Control': 'no-cache',
+        'Ocp-Apim-Subscription-Key': GHANA_NLP_API_KEY
+      },
+      timeout: 30000 // 30 second timeout for audio processing
+    });
+
+    const transcribedText = asrResponse.data;
+
+    res.status(200).json({
+      message: "Audio transcription completed.",
+      transcribedText,
+      language,
+      originalAudioSize: audioBuffer.length
+    });
+
+  } catch (error) {
+    console.error("ASR Error:", error.message);
+    
+    if (error.response) {
+      console.error("ASR API Response Error:", error.response.status, error.response.data);
+      return res.status(500).json({ 
+        error: "ASR API request failed.", 
+        details: error.response.status === 401 ? "Invalid API key" : 
+                error.response.status === 400 ? "Invalid audio format or language" :
+                "ASR service unavailable"
+      });
+    }
+    
+    res.status(500).json({ error: "Audio transcription failed." });
+  }
+};
+
+// Enhanced function: Process audio input, transcribe, then localize output
+export const processAudioAndLocalize = async (req, res) => {
+  const { language, speakerId } = req.body;
+  
+  if (!language) {
+    return res.status(400).json({ error: "Language parameter is required." });
+  }
+
+  if (!ASR_SUPPORTED_LANGUAGES.includes(language)) {
+    return res.status(400).json({ 
+      error: `Language '${language}' is not supported for ASR.`,
+      supportedLanguages: ASR_SUPPORTED_LANGUAGES
+    });
+  }
+
+  if (!req.file && !req.body.audioData) {
+    return res.status(400).json({ error: "Audio file or audio data is required." });
+  }
+
+  try {
+    let audioBuffer;
+    
+    // Handle different audio input formats
+    if (req.file) {
+      audioBuffer = req.file.buffer;
+    } else if (req.body.audioData) {
+      const base64Audio = req.body.audioData.replace(/^data:audio\/[^;]+;base64,/, '');
+      audioBuffer = Buffer.from(base64Audio, 'base64');
+    }
+
+    // Step 1: Transcribe audio to text
+    const asrResponse = await axios.post(`${ASR_URL}?language=${language}`, audioBuffer, {
+      headers: {
+        'Content-Type': 'audio/mpeg',
+        'Cache-Control': 'no-cache',
+        'Ocp-Apim-Subscription-Key': GHANA_NLP_API_KEY
+      },
+      timeout: 30000
+    });
+
+    const transcribedText = asrResponse.data;
+
+    // Step 2: Create a diagnosis record with the transcribed text
+    const diagnosis = new Diagnosis({
+      combinedResult: transcribedText,
+      language: language,
+      inputMethod: 'audio',
+      originalAudioSize: audioBuffer.length
+    });
+    await diagnosis.save();
+
+    // Step 3: Generate TTS audio if TTS is supported for this language
+    let audioURL = null;
+    let localizedText = transcribedText;
+
+    if (SPEAKER_MAPPING[language]) {
+      const selectedSpeakerId = speakerId || getDefaultSpeaker(language);
+
+      // Generate TTS audio
+      const ttsResponse = await axios.post(TTS_URL, {
+        text: localizedText,
+        language: language,
+        speaker_id: selectedSpeakerId
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache',
+          'Ocp-Apim-Subscription-Key': GHANA_NLP_API_KEY
+        },
+        responseType: 'arraybuffer'
+      });
+
+      const audioBuffer = Buffer.from(ttsResponse.data);
+      const audioBase64 = audioBuffer.toString('base64');
+      audioURL = `data:audio/wav;base64,${audioBase64}`;
+
+      // Update diagnosis with audio URL
+      diagnosis.audioURL = audioURL;
+      await diagnosis.save();
+    }
+
+    res.status(200).json({
+      message: "Audio processing and localization completed.",
+      diagnosisId: diagnosis._id,
+      transcribedText,
+      localizedText,
+      audioURL,
+      speakerId: speakerId || getDefaultSpeaker(language),
+      language,
+      inputMethod: 'audio'
+    });
+
+  } catch (error) {
+    console.error("Audio Processing Error:", error.message);
+    
+    if (error.response) {
+      console.error("API Response Error:", error.response.status, error.response.data);
+      return res.status(500).json({ 
+        error: "Audio processing failed.", 
+        details: error.response.status === 401 ? "Invalid API key" : 
+                error.response.status === 400 ? "Invalid audio format or language" :
+                "API service unavailable"
+      });
+    }
+    
+    res.status(500).json({ error: "Audio processing failed." });
+  }
+};
+
+// Original function: Translates diagnosis result into selected local language and generates audio using TTS
 export const localizeOutput = async (req, res) => {
   const { diagnosisId, speakerId } = req.body;
   
@@ -128,5 +309,20 @@ export const getAvailableSpeakers = (req, res) => {
     availableSpeakers: speakers,
     defaultSpeaker: speakers[0]
   });
-  
+};
+
+// Helper function to get supported ASR languages
+export const getSupportedASRLanguages = (req, res) => {
+  res.status(200).json({
+    supportedLanguages: ASR_SUPPORTED_LANGUAGES,
+    languageDetails: {
+      'tw': 'Twi',
+      'gaa': 'Ga', 
+      'dag': 'Dagbani',
+      'yo': 'Yoruba',
+      'ee': 'Ewe',
+      'ki': 'Kikuyu',
+      'ha': 'Hausa'
+    }
+  });
 };
