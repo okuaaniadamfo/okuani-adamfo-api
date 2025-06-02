@@ -9,6 +9,9 @@ import { swaggerDocs, swaggerUiSetup } from "./config/swagger.js";
 import userRoutes from "./routes/user.js";
 dotenv.config();
 
+// Debug: Check if IMAGE_MODEL_URL is loaded
+console.log('IMAGE_MODEL_URL:', process.env.IMAGE_MODEL_URL);
+
 
 // create express app
 const okuaniadamfoapp = express();

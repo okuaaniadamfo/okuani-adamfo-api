@@ -3,7 +3,7 @@ import FormData from 'form-data';
 
 // NLP ASR and Image Model endpoints
 const GHANA_ASR_BASE_URL = process.env.GHANA_ASR_BASE_URL ;
-const IMAGE_MODEL_URL = process.env.IMAGE_MODEL_URL;
+// const IMAGE_MODEL_URL = process.env.IMAGE_MODEL_URL;
 
 // Supported languages for ASR
 const SUPPORTED_LANGUAGES = {
@@ -211,15 +211,15 @@ export const testGhanaNLPConnection = async (req, res) => {
 
 // Handles image uploads by sending files to image prediction API and predicts crop disease from image input
 export const handleImageUpload = async (req, res) => {
+  // ✅ Validate file
   try {
-    // ✅ Validate file
-    // Add environment variable check
-    if (!IMAGE_MODEL_URL) {
+    // Check environment variable
+    if (!process.env.IMAGE_MODEL_URL) {
       return res.status(500).json({
         error: 'Plant disease API not configured',
         message: 'Service configuration error',
         debug: {
-          envVarType: typeof IMAGE_MODEL_URL
+          envVarType: typeof process.env.IMAGE_MODEL_URL
         }
       });
     }
@@ -228,6 +228,7 @@ export const handleImageUpload = async (req, res) => {
     if (!req.file || !req.file.buffer) {
       return res.status(400).json({ error: 'No image file uploaded.' });
     }
+
     if (!req.file.mimetype.startsWith('image/')) {
       return res.status(400).json({ error: 'Invalid image file format.' });
     }
@@ -238,7 +239,7 @@ export const handleImageUpload = async (req, res) => {
       size: req.file.buffer.length
     });
 
-    // Create FormData for image prediction
+    // Create FormData for the external API
     const formData = new FormData();
     formData.append('file', req.file.buffer, {
       filename: req.file.originalname || 'image.jpg',
@@ -246,7 +247,7 @@ export const handleImageUpload = async (req, res) => {
     });
 
     // Send to plant disease API
-    const endpoint = `${IMAGE_MODEL_URL}/predict_image/`;
+    const endpoint = `${process.env.IMAGE_MODEL_URL}/predict_image/`;
     console.log(`Sending request to: ${endpoint}`);
 
     const response = await axios.post(endpoint, formData, {
@@ -254,7 +255,9 @@ export const handleImageUpload = async (req, res) => {
         ...formData.getHeaders(),
         'accept': 'application/json'
       },
-      timeout: 80000
+      timeout: 80000,
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity
     });
 
     console.log('Plant Disease API Response:', response.data);
@@ -286,19 +289,19 @@ export const handleImageUpload = async (req, res) => {
     
     if (error.code === 'ECONNABORTED') {
       res.status(500).json({
-        error: 'Request timeout - the image processing service is taking too long to respond.',
-        details: 'The external API might be slow or overloaded. Please try again.'
+        error: 'Request timeout',
+        details: 'The external API is taking too long to respond.'
       });
     } else if (error.response) {
       console.error('API Response Error:', error.response.data);
       res.status(500).json({
-        error: 'Image classification failed.',
+        error: 'Image classification failed',
         details: error.response.data,
         status: error.response.status
       });
     } else {
       res.status(500).json({
-        error: 'Image classification failed.',
+        error: 'Image classification failed',
         details: error.message
       });
     }
