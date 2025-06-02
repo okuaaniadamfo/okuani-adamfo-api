@@ -1,210 +1,117 @@
 import axios from 'axios';
 import FormData from 'form-data';
+import { GhanaNLP } from '@paakways/ghananlp-node';
+import 'dotenv/config';
 
-// NLP ASR and Image Model endpoints
-const GHANA_ASR_BASE_URL = process.env.GHANA_ASR_BASE_URL ;
-// const IMAGE_MODEL_URL = process.env.IMAGE_MODEL_URL;
+// Initialize the GhanaNLP client
+const ghanaNLPClient = new GhanaNLP(process.env.GHANA_API_KEY);
 
-// Supported languages for ASR
-const SUPPORTED_LANGUAGES = {
-  'tw': 'Twi',
-  'gaa': 'Ga', 
-  'dag': 'Dagbani',
-  'yo': 'Yoruba',
-  'ee': 'Ewe',
-  'ki': 'Kikuyu',
-  'ha': 'Hausa'
-  
+// const apiKey = process.env.GHANA_API_KEY || '816b752141044d96975ac20f3f0bd101';
+// console.log('Using API key:', apiKey);
+// const ghanaNLPClient = new GhanaNLP(apiKey);
+// console.log('GHANA_API_KEY at controller:', process.env.GHANA_API_KEY);
+
+
+// Supported languages mapping
+const supportedLanguages = {
+  tw: 'Twi',
+  gaa: 'Ga',
+  dag: 'Dagbani',
+  yo: 'Yoruba',
+  ee: 'Ewe',
+  ki: 'Kikuyu',
+  ha: 'Hausa'
 };
 
-// Handles voice uploads and transcribes voice using Ghana NLP ASR 
+// Voice Upload Handler
 export const handleVoiceUpload = async (req, res) => {
   try {
-    // ✅ Validate file
-    if (!req.file || !req.file.buffer) {
-      return res.status(400).json({ error: 'No audio file uploaded.' });
-    }
-
-    if (!req.file.mimetype.startsWith('audio/')) {
-      return res.status(400).json({ error: 'Invalid audio file format.' });
-    }
-
-    // ✅ Validate and get language parameter
-    const language = req.body.language || req.query.language || 'tw'; // Default to Twi
-    
-    if (!SUPPORTED_LANGUAGES[language]) {
-      return res.status(400).json({ 
-        error: 'Unsupported language',
-        message: `Language '${language}' is not supported. Supported languages: ${Object.keys(SUPPORTED_LANGUAGES).join(', ')}`,
-        supportedLanguages: SUPPORTED_LANGUAGES
+    // Check if API key is configured
+    if (!process.env.GHANA_API_KEY) {
+      return res.status(500).json({
+        error: 'Ghana NLP API not configured',
+        message: 'API key is missing',
+        debug: {
+          envVarType: typeof process.env.GHANA_API_KEY
+        }
       });
     }
 
-    console.log('Processing audio file:', {
+    // Validate audio file
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({ 
+        error: 'No audio file uploaded.',
+        supportedLanguages 
+      });
+    }
+
+    // Get language from request (form data or query parameter)
+    const language = req.body.language || req.query.language || 'tw';
+
+    // Validate language
+    if (!supportedLanguages[language]) {
+      return res.status(400).json({
+        error: `Unsupported language: ${language}`,
+        supportedLanguages,
+        message: 'Please use one of the supported language codes'
+      });
+    }
+
+    console.log('Audio file info:', {
       originalname: req.file.originalname,
       mimetype: req.file.mimetype,
       size: req.file.buffer.length,
+      language: language
+    });
+
+    // Prepare ASR request
+    const asrRequest = {
       language: language,
-      languageName: SUPPORTED_LANGUAGES[language]
-    });
+      audioFile: req.file.buffer
+    };
 
-    const audioBuffer = req.file.buffer;
-    
-    // Construct the API URL with language parameter
-    const apiUrl = `${GHANA_ASR_BASE_URL}?language=${language}`;
-    
-    console.log(`Sending ASR request to: ${apiUrl}`);
-    console.log('Request headers:', {
-      'Content-Type': 'audio/mpeg',
-      'Cache-Control': 'no-cache'
-    });
+    console.log(`Transcribing audio in language: ${language} (${supportedLanguages[language]})`);
 
-    // Send binary audio data directly to Ghana NLP ASR v2
-    const response = await axios.post(apiUrl, audioBuffer, {
-      headers: {
-        'Content-Type': 'audio/mpeg', // Fixed content type as per API docs
-        'Cache-Control': 'no-cache'
-        // Note: No subscription key needed for v2 API
-      },
-      timeout: 180000, // 3 minutes for longer audio files
-      maxContentLength: Infinity,
-      maxBodyLength: Infinity,
-      // Ensure binary data is sent properly
-      responseType: 'json'
-    });
+    // Call Ghana NLP ASR API using the package
+    const response = await ghanaNLPClient.transcribeAudio(asrRequest);
 
-    console.log('Ghana NLP ASR v2 Response Status:', response.status);
-    console.log('Ghana NLP ASR v2 Response:', response.data);
+    console.log('Ghana NLP ASR Response:', response);
 
-    // Extract transcription from response
-    let transcription;
-    
-    if (typeof response.data === 'string') {
-      transcription = response.data;
-    } else if (response.data.transcription) {
-      transcription = response.data.transcription;
-    } else if (response.data.text) {
-      transcription = response.data.text;
-    } else if (response.data.result) {
-      transcription = response.data.result;
-    } else {
-      transcription = response.data;
-    }
-    
-    if (!transcription || transcription.trim() === '') {
-      return res.status(500).json({ 
-        error: 'No transcription received from ASR service',
-        rawResponse: response.data,
-        responseStatus: response.status,
-        message: 'The audio might be unclear or in an unsupported format'
-      });
-    }
-
-    res.status(200).json({ 
-      success: true,
-      transcription: transcription.toString().trim(),
+    // Format the response
+    const result = {
+      transcription: response.transcribedText || response.text || '',
       language: language,
-      languageName: SUPPORTED_LANGUAGES[language],
-      audioInfo: {
-        originalName: req.file.originalname,
-        size: req.file.buffer.length,
-        mimeType: req.file.mimetype
-      },
-      apiVersion: 'v2',
-      rawResponse: response.data
-    });
+      languageName: supportedLanguages[language],
+      confidence: response.confidence || null,
+      duration: response.duration || null,
+      rawResponse: response
+    };
+
+    res.status(200).json(result);
 
   } catch (error) {
-    console.error('ASR Error Details:', {
-      message: error.message,
-      code: error.code,
-      response: error.response?.data,
-      status: error.response?.status,
-      url: error.config?.url
-    });
-    
-    if (error.code === 'ECONNABORTED') {
-      res.status(500).json({
-        error: 'Request timeout - the speech recognition service is taking too long to respond.',
-        details: 'The ASR API might be processing a very long audio file or is overloaded.',
-        timeout: '3 minutes',
-        suggestion: 'Try with shorter audio files (under 2 minutes) or try again later.'
+    console.error('Voice transcription error:', error);
+
+    // Handle specific error types
+    if (error.message && error.message.includes('API key')) {
+      return res.status(401).json({
+        error: 'Invalid API key',
+        details: 'Please check your Ghana NLP API key configuration'
       });
-    } else if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
-      res.status(500).json({
-        error: 'Cannot connect to Ghana NLP API',
-        details: 'The Ghana NLP service appears to be unreachable.',
-        suggestion: 'Please check your internet connection and try again later.',
-        apiUrl: `${GHANA_ASR_BASE_URL}?language=${req.body.language || req.query.language || 'tw'}`
-      });
-    } else if (error.response) {
-      console.error('ASR API Response Error:', error.response.data);
-      
-      let errorMessage = 'Voice transcription failed.';
-      let suggestion = 'Please check the audio file format and try again.';
-      
-      if (error.response.status === 400) {
-        errorMessage = 'Bad request - invalid audio format or language.';
-        suggestion = 'Ensure audio is in MP3 format and language code is valid.';
-      } else if (error.response.status === 413) {
-        errorMessage = 'Audio file too large.';
-        suggestion = 'Try with a smaller audio file.';
-      } else if (error.response.status === 422) {
-        errorMessage = 'Audio processing failed.';
-        suggestion = 'The audio might be corrupted or in an unsupported format.';
-      }
-      
-      res.status(error.response.status || 500).json({
-        error: errorMessage,
-        details: error.response.data,
-        status: error.response.status,
-        suggestion: suggestion
-      });
-    } else {
-      res.status(500).json({ 
-        error: 'Voice transcription failed.',
-        details: error.message,
+    }
+
+    if (error.message && error.message.includes('network')) {
+      return res.status(503).json({
+        error: 'Service unavailable',
+        details: 'Cannot connect to Ghana NLP API',
         suggestion: 'Please check if the Ghana NLP API is accessible.'
       });
     }
-  }
-};
 
-// Test endpoint to check Ghana NLP API v2 connectivity
-export const testGhanaNLPConnection = async (req, res) => {
-  try {
-    console.log('Testing Ghana NLP API v2 connection...');
-    
-    // Test basic connectivity to the domain
-    const testResponse = await axios.get('https://translation-api.ghananlp.org', {
-      timeout: 10000
-    });
-    
-    console.log('Connection test successful');
-    
-    res.status(200).json({
-      message: 'Ghana NLP API is reachable',
-      status: testResponse.status,
-      apiVersion: 'v2',
-      endpoint: GHANA_ASR_BASE_URL,
-      supportedLanguages: SUPPORTED_LANGUAGES,
-      features: [
-        'Supports longer audio files',
-        'No API key required',
-        'Binary audio upload',
-        'Multiple language support'
-      ]
-    });
-    
-  } catch (error) {
-    console.error('Connection test failed:', error.message);
-    
     res.status(500).json({
-      error: 'Cannot connect to Ghana NLP API',
-      details: error.message,
-      apiVersion: 'v2',
-      endpoint: GHANA_ASR_BASE_URL,
-      suggestion: 'Check internet connection and API availability'
+      error: 'Voice transcription failed.',
+      details: error.message || 'Unknown error occurred',
+      suggestion: 'Please check if the Ghana NLP API is accessible.'
     });
   }
 };
@@ -308,10 +215,56 @@ export const handleImageUpload = async (req, res) => {
   }
 };
 
-// Helper function to get supported languages
-export const getSupportedLanguages = (req, res) => {
-  res.status(200).json({
-    supportedLanguages: SUPPORTED_LANGUAGES,
-    defaultLanguage: 'tw'
-  });
+// Get Supported Languages
+export const getSupportedLanguages = async (req, res) => {
+  try {
+    // You can also get languages from the API
+    const languages = await ghanaNLPClient.getLanguages();
+    
+    res.status(200).json({
+      supportedLanguages,
+      defaultLanguage: 'tw',
+      apiLanguages: languages // Languages from the API
+    });
+  } catch (error) {
+    console.error('Error fetching languages:', error);
+    
+    // Fallback to hardcoded languages
+    res.status(200).json({
+      supportedLanguages,
+      defaultLanguage: 'tw',
+      note: 'Using cached language list due to API error'
+    });
+  }
+};
+
+// Test Ghana NLP Connection
+export const testGhanaNLPConnection = async (req, res) => {
+  try {
+    if (!process.env.GHANA_API_KEY) {
+      return res.status(500).json({
+        error: 'Ghana NLP API key not configured',
+        configured: false
+      });
+    }
+
+    // Test connection by getting supported languages
+    const languages = await ghanaNLPClient.getLanguages();
+    
+    res.status(200).json({
+      message: 'Ghana NLP API connection successful',
+      configured: true,
+      apiKeyPresent: !!process.env.GHANA_API_KEY,
+      languagesCount: Object.keys(languages || {}).length
+    });
+  } catch (error) {
+    console.error('Ghana NLP connection test failed:', error);
+    
+    res.status(500).json({
+      error: 'Cannot connect to Ghana NLP API',
+      details: error.message,
+      configured: !!process.env.GHANA_API_KEY,
+      suggestion: 'Check your API key and internet connection'
+    });
+  }
 };

@@ -8,9 +8,30 @@ const uploadRoutes = Router();
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { 
-    fileSize: 50 * 1024 * 1024, // 50MB for longer audio files
-    fieldSize: 50 * 1024 * 1024
+    fileSize: 50 * 1024 * 1024, // 50MB limit
+    files: 1 // Allow only single file uploads
+  },
+  fileFilter: (req, file, cb) => {
+    // For voice uploads
+    if (file.fieldname === 'audio') {
+      if (!file.mimetype.match(/audio\/(mpeg|wav|ogg|mp3|m4a)/)) {
+        return cb(new Error('Only audio files are allowed (MP3, WAV, OGG, M4A)'), false);
+      }
+    }
+    // For image uploads
+    else if (file.fieldname === 'file') {
+      if (!file.mimetype.match(/image\/(jpeg|png|jpg|gif)/)) {
+        return cb(new Error('Only image files are allowed (JPEG, PNG, JPG, GIF)'), false);
+      }
+    }
+    cb(null, true);
   }
+});
+
+// Add request logging middleware
+uploadRoutes.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+  next();
 });
 
 // GET /upload/test-connection - Test Ghana NLP API connectivity
@@ -225,6 +246,45 @@ uploadRoutes.post('/voice', upload.single('audio'), handleVoiceUpload);
  *       500:
  *         description: Internal server error during image processing
  */
-uploadRoutes.post('/image', upload.single('file'), handleImageUpload);
+// uploadRoutes.post('/image', upload.single('file'), handleImageUpload);
+uploadRoutes.post('/image', 
+  upload.single('file'),
+  (req, res, next) => {
+    if (!req.file) {
+      return res.status(400).json({ 
+        error: 'No image file uploaded',
+        supportedFormats: ['JPEG', 'PNG', 'JPG', 'GIF']
+      });
+    }
+    console.log('Image file received:', {
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size
+    });
+    next();
+  },
+  handleImageUpload
+);
+
+
+// Error handling middleware for Multer
+uploadRoutes.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    // A Multer error occurred when uploading
+    return res.status(400).json({
+      error: 'File upload error',
+      details: err.message,
+      code: err.code
+    });
+  } else if (err) {
+    // Other errors
+    return res.status(500).json({
+      error: 'Internal server error',
+      details: err.message
+    });
+  }
+  next();
+});
+
 
 export default uploadRoutes;
