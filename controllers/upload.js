@@ -400,7 +400,7 @@ export const convertSolutionsToAudio = async (req, res) => {
       headers: {
         'Content-Type': 'application/json',
         'Cache-Control': 'no-cache',
-        'Ocp-Apim-Subscription-Key': process.env.GHANA_API_KEY || '816b752141044d96975ac20f3f0bd101',
+        'Ocp-Apim-Subscription-Key': process.env.GHANA_API_KEY ,
       }
     });
 
