@@ -12,30 +12,71 @@ const upload = multer({
     files: 1 // Allow only single file uploads
   },
   fileFilter: (req, file, cb) => {
-    // For voice uploads
     if (file.fieldname === 'audio') {
       if (!file.mimetype.match(/audio\/(mpeg|wav|ogg|mp3|m4a)/)) {
         return cb(new Error('Only audio files are allowed (MP3, WAV, OGG, M4A)'), false);
       }
       cb(null, true);
-    }
-    // For image uploads
+    } 
     else if (file.fieldname === 'file') {
       if (!file.mimetype.match(/image\/(jpeg|png|jpg|gif)/)) {
         return cb(new Error('Only image files are allowed (JPEG, PNG, JPG, GIF)'), false);
       }
       cb(null, true);
     } else {
-      // Reject files with unexpected field names
       cb(new Error(`Unexpected field name: ${file.fieldname}`), false);
     }
   }
 });
 
-// Add request logging middleware
+// Enhanced CORS middleware for upload routes
+uploadRoutes.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  
+  next();
+});
+
+// Request logging middleware
 uploadRoutes.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
   next();
+});
+
+// Error handling middleware
+uploadRoutes.use((err, req, res, next) => {
+  console.error(`[${new Date().toISOString()}] Error:`, err.message, err.stack || '');
+
+  if (err instanceof multer.MulterError) {
+    return res.status(400).json({
+      error: 'File upload error',
+      details: err.message,
+      code: err.code
+    });
+  } 
+  
+  // Handle specific error types
+  if (err.message.includes('Only audio files are allowed') ||
+      err.message.includes('Only image files are allowed') ||
+      err.message.includes('Unexpected field name')) {
+    return res.status(400).json({
+      error: 'Invalid file type or field',
+      details: err.message
+    });
+  }
+
+  // For other unhandled errors
+  res.status(500).json({
+    error: 'Internal server error',
+    details: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
+  });
 });
 
 // GET /upload/test-connection - Test Ghana NLP API connectivity
@@ -410,37 +451,5 @@ uploadRoutes.post('/localizelanguage', localizeLanguage);
 uploadRoutes.post('/solutions-to-audio', convertSolutionsToAudio);
 
 
-
-uploadRoutes.use((err, req, res, next) => {
-  // Log any error that reaches this middleware
-  if (err) {
-    console.error(`[${new Date().toISOString()}] Error in UPLOAD route [${req.method} ${req.path}]:`, err.message, err.stack || '');
-  }
-
-  if (err instanceof multer.MulterError) {
-    // A Multer error occurred when uploading
-    return res.status(400).json({
-      error: 'File upload error',
-      details: err.message,
-      code: err.code
-    });
-  } else if (err) {
-    // Handle custom errors from fileFilter or other synchronous errors
-    if (err.message.includes('Only audio files are allowed') ||
-        err.message.includes('Only image files are allowed') ||
-        err.message.includes('Unexpected field name')) {
-      return res.status(400).json({
-        error: 'Invalid file type or field',
-        details: err.message
-      });
-    }
-    // For other unhandled errors
-    return res.status(500).json({
-      error: 'Internal server error',
-      details: err.message
-    });
-  }
-  next();
-});
 
 export default uploadRoutes;

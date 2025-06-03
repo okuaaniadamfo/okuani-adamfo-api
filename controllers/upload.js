@@ -128,7 +128,9 @@ export const handleImageUpload = async (req, res) => {
         debug: {
           envVarType: typeof process.env.IMAGE_MODEL_URL
         }
+        
       });
+      
     }
 
     // Validate file
@@ -146,6 +148,7 @@ export const handleImageUpload = async (req, res) => {
       size: req.file.buffer.length
     });
 
+    
     // Create FormData for the external API
     const formData = new FormData();
     formData.append('file', req.file.buffer, {

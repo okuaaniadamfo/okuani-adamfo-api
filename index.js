@@ -7,89 +7,93 @@ import diagnoseRoutes from "./routes/diagnose.js";
 import outputRoutes from "./routes/output.js";
 import { swaggerDocs, swaggerUiSetup } from "./config/swagger.js";
 import userRoutes from "./routes/user.js";
+import swaggerUi from 'swagger-ui-express'; // Add this import
 
 dotenv.config();
 
 // Debug environment variables
-console.log('IMAGE_MODEL_URL:', process.env.IMAGE_MODEL_URL);
-console.log('All environment variables:', Object.keys(process.env));
-console.log('GHANA_API_KEY exists:', 'GHANA_API_KEY' in process.env);
+console.log('Environment Variables:', {
+  IMAGE_MODEL_URL: process.env.IMAGE_MODEL_URL ? 'Set' : 'Missing',
+  GHANA_API_KEY: process.env.GHANA_API_KEY ? 'Set' : 'Missing',
+  MONGO_URI: process.env.MONGO_URI ? 'Set' : 'Missing'
+});
 
-// create express app
-const okuaniadamfoapp = express();
+// Create express app
+const app = express();
 
-// Configure CORS
+// Enhanced CORS configuration
 const allowedOrigins = [
   'https://okuaniadamfo.netlify.app',
+  'http://localhost:3000',
   'http://localhost:5000'
 ];
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.includes(origin) || 
-        origin.endsWith('.netlify.app') || // Allow all Netlify subdomains
-        origin.includes('localhost') ||    // Allow localhost variants
-        origin.includes('127.0.0.1')) {   // Allow direct IP access
+    if (!origin || allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
-    
-    // For other origins, you might want to log them
     console.warn('Blocked CORS request from origin:', origin);
-    return callback(new Error('Not allowed by CORS'));
+    return callback(new Error(`Origin '${origin}' not allowed by CORS`));
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
   credentials: true,
-  optionsSuccessStatus: 200 // For legacy browser support
+  optionsSuccessStatus: 204
 };
 
 // Apply middleware
-okuaniadamfoapp.use(cors(corsOptions));
-okuaniadamfoapp.use(express.json({ limit: "50mb" }));
-okuaniadamfoapp.use(express.urlencoded({ limit: "50mb", extended: true }));
+app.use(cors(corsOptions));
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
-// Security headers
-okuaniadamfoapp.use((req, res, next) => {
+// Security headers middleware
+app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-XSS-Protection', '1; mode=block');
-  res.setHeader('Referrer-Policy', 'same-origin');
   next();
 });
 
-// Routes
-okuaniadamfoapp.use('/upload', uploadRoutes);
-okuaniadamfoapp.use('/', diagnoseRoutes);
-okuaniadamfoapp.use('/output', outputRoutes);
-okuaniadamfoapp.use('/auth', userRoutes);
+// Initialize routes
+app.use('/upload', uploadRoutes);
+app.use('/', diagnoseRoutes);
+app.use('/output', outputRoutes);
+app.use('/auth', userRoutes);
 
-// Redirect root path to /api-docs
-okuaniadamfoapp.get('/', (req, res) => {
-  res.redirect('/api-docs');
+// Swagger documentation - Updated this line
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs));
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'OK',
+    mongo: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'
+  });
 });
 
-// Setup Swagger UI
-okuaniadamfoapp.use('/api-docs', swaggerDocs, swaggerUiSetup);
-
-// Error handling for undefined routes
-okuaniadamfoapp.use((req, res) => {
-  res.status(404).json({ error: 'Endpoint not found' });
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ error: 'Something went wrong!' });
 });
 
+// Start server
 const startServer = async () => {
   try {
-    await mongoose.connect(process.env.MONGO_URI);
-    console.log('MongoDB connected');
+    await mongoose.connect(process.env.MONGO_URI, {
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000
+    });
+    console.log('MongoDB connected successfully');
     
     const PORT = process.env.PORT || 5000;
-    okuaniadamfoapp.listen(PORT, () => {
+    app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
+      console.log(`API docs: http://localhost:${PORT}/api-docs`);
     });
   } catch (err) {
-    console.error('MongoDB connection error:', err);
+    console.error('Server startup error:', err);
     process.exit(1);
   }
 };
