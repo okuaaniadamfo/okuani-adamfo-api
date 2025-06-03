@@ -254,7 +254,6 @@ export const localizeOutput = async (req, res) => {
     });
 
     // Convert audio buffer to base64 or save to file storage
-    // For now, we'll create a data URL for the audio
     const audioBuffer = Buffer.from(ttsResponse.data);
     const audioBase64 = audioBuffer.toString('base64');
     const audioURL = `data:audio/wav;base64,${audioBase64}`;
@@ -280,7 +279,9 @@ export const localizeOutput = async (req, res) => {
       console.error("API Response Error:", error.response.status, error.response.data);
       return res.status(500).json({ 
         error: "TTS API request failed.", 
-        details: error.response.status === 401 ? "Invalid API key" : "API service unavailable"
+        details: error.response.status === 401 ? "Invalid API key" : 
+                error.response.status === 400 ? "Invalid text or language parameter" :
+                "API service unavailable"
       });
     }
     

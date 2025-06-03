@@ -215,6 +215,225 @@ export const handleImageUpload = async (req, res) => {
   }
 };
 
+
+/**
+ * Converts text to speech using GhanaNLP TTS API
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+export const localizeLanguage = async (req, res) => {
+  try {
+    // Validate required fields
+    const { text, language, speaker_id } = req.body;
+    
+    if (!text) {
+      return res.status(400).json({ 
+        error: 'Text is required for text-to-speech conversion',
+        example: {
+          text: "Hello world",
+          language: "tw",
+          speaker_id: "twi_speaker_4"
+        }
+      });
+    }
+
+    // Set default language if not provided
+    const lang = language || 'tw';
+    const speaker = speaker_id || `twi_speaker_${Math.floor(Math.random() * 4) + 1}`;
+
+    // Validate language is supported
+    if (!supportedLanguages[lang]) {
+      return res.status(400).json({
+        error: `Unsupported language: ${lang}`,
+        supportedLanguages,
+        message: 'Please use one of the supported language codes'
+      });
+    }
+
+    console.log('Text-to-speech request:', {
+      textLength: text.length,
+      language: lang,
+      speaker_id: speaker
+    });
+
+    // Prepare request body for GhanaNLP API
+    const body = {
+      text: text,
+      language: lang,
+      speaker_id: speaker
+    };
+
+    // Call GhanaNLP TTS API
+    const response = await fetch('https://translation-api.ghananlp.org/tts/v1/synthesize', {
+      method: 'POST',
+      body: JSON.stringify(body),
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache',
+        'Ocp-Apim-Subscription-Key': process.env.GHANA_API_KEY,
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      throw new Error(`GhanaNLP TTS API error: ${response.status} - ${errorData}`);
+    }
+
+    // Get the audio data (assuming it returns binary audio data)
+    const audioData = await response.arrayBuffer();
+
+    // Convert ArrayBuffer to Base64 for easier transmission
+    const audioBase64 = Buffer.from(audioData).toString('base64');
+
+    res.status(200).json({
+      success: true,
+      audio: audioBase64,
+      format: 'audio/mpeg', // Assuming MP3 format
+      language: lang,
+      speaker_id: speaker,
+      text_length: text.length
+    });
+
+  } catch (error) {
+    console.error('Text-to-speech conversion error:', error);
+
+    // Handle specific error types
+    if (error.message.includes('API key')) {
+      return res.status(401).json({
+        error: 'Invalid API key',
+        details: 'Please check your Ghana NLP API key configuration'
+      });
+    }
+
+    if (error.message.includes('network') || error.message.includes('fetch')) {
+      return res.status(503).json({
+        error: 'Service unavailable',
+        details: 'Cannot connect to Ghana NLP TTS API',
+        suggestion: 'Please check if the Ghana NLP API is accessible.'
+      });
+    }
+
+    res.status(500).json({
+      error: 'Text-to-speech conversion failed.',
+      details: error.message || 'Unknown error occurred',
+      suggestion: 'Please check your request parameters and try again.'
+    });
+  }
+};
+
+
+/**
+ * Converts plant disease solutions to audio in specified language
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+/**
+ * Converts plant disease solutions from image prediction to audio
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+export const convertSolutionsToAudio = async (req, res) => {
+  try {
+    const { prediction, language, speaker_id } = req.body;
+
+    // Validate required prediction data
+    if (!prediction || !prediction.raw_response || !prediction.raw_response.solutions) {
+      return res.status(400).json({
+        error: 'Invalid prediction data format',
+        message: 'The request must include prediction data with solutions from /upload/image',
+        example: {
+          prediction: {
+            raw_response: {
+              solutions: [
+                "Plant resistant varieties",
+                "Use crop rotation",
+                "Apply fungicides when needed"
+              ]
+            }
+          },
+          language: "tw",
+          speaker_id: "twi_speaker_4"
+        }
+      });
+    }
+
+    // Extract solutions and clean them (remove markdown formatting like **)
+    const rawSolutions = prediction.raw_response.solutions;
+    const cleanedSolutions = rawSolutions.map(solution => 
+      solution.replace(/\*\*/g, '').replace(/^\s*-\s*/, '').trim()
+    );
+
+    // Set default language if not provided
+    const lang = language || 'tw';
+    const speaker = speaker_id || `twi_speaker_${Math.floor(Math.random() * 4) + 1}`;
+
+    // Validate language is supported
+    if (!supportedLanguages[lang]) {
+      return res.status(400).json({
+        error: `Unsupported language: ${lang}`,
+        supportedLanguages,
+        message: 'Please use one of the supported language codes'
+      });
+    }
+
+    // Combine all solutions into one text with natural pauses
+    const combinedText = cleanedSolutions.join('. Next solution: ');
+
+    console.log('Converting disease solutions to audio:', {
+      disease: prediction.disease,
+      solutionCount: cleanedSolutions.length,
+      language: lang,
+      speaker_id: speaker
+    });
+
+    // Prepare request body for GhanaNLP API
+    const body = {
+      text: `Solutions for ${prediction.disease}. ${combinedText}`,
+      language: lang,
+      speaker_id: speaker
+    };
+
+    // Call GhanaNLP TTS API
+    const response = await fetch('https://translation-api.ghananlp.org/tts/v1/synthesize', {
+      method: 'POST',
+      body: JSON.stringify(body),
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache',
+        'Ocp-Apim-Subscription-Key': process.env.GHANA_API_KEY || '816b752141044d96975ac20f3f0bd101',
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      throw new Error(`GhanaNLP TTS API error: ${response.status} - ${errorData}`);
+    }
+
+    // Get the audio data
+    const audioData = await response.arrayBuffer();
+    const audioBase64 = Buffer.from(audioData).toString('base64');
+
+    res.status(200).json({
+      success: true,
+      audio: audioBase64,
+      format: 'audio/mpeg',
+      language: lang,
+      speaker_id: speaker,
+      disease: prediction.disease,
+      solution_count: cleanedSolutions.length,
+      text_length: combinedText.length
+    });
+
+  } catch (error) {
+    console.error('Solutions to audio conversion error:', error);
+    res.status(500).json({
+      error: 'Failed to convert solutions to audio',
+      details: error.message || 'Unknown error occurred',
+      suggestion: 'Please check your prediction data format and try again.'
+    });
+  }
+};
+
 // Get Supported Languages
 export const getSupportedLanguages = async (req, res) => {
   try {

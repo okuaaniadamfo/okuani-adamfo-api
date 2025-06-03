@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { handleVoiceUpload, handleImageUpload, getSupportedLanguages,testGhanaNLPConnection} from '../controllers/upload.js'
+import { handleVoiceUpload, handleImageUpload, getSupportedLanguages,testGhanaNLPConnection, localizeLanguage, convertSolutionsToAudio} from '../controllers/upload.js'
 
 const uploadRoutes = Router();
 
@@ -272,6 +272,144 @@ uploadRoutes.post('/image', upload.single('file'), handleImageUpload);
 
 
 // Error handling middleware for Multer
+
+
+// Add these to your uploadRoutes in upload.js routes file
+
+/**
+ * @swagger
+ * /upload/localizelanguage:
+ *   post:
+ *     summary: Convert text to speech in specified language
+ *     description: Uses GhanaNLP TTS API to convert text to audio in supported languages
+ *     tags:
+ *       - Audio
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               text:
+ *                 type: string
+ *                 description: Text to convert to speech
+ *                 example: "Hello world"
+ *               language:
+ *                 type: string
+ *                 description: Language code for TTS
+ *                 enum: [tw, gaa, dag, yo, ee, ki, ha]
+ *                 default: tw
+ *                 example: tw
+ *               speaker_id:
+ *                 type: string
+ *                 description: Specific speaker ID for the language
+ *                 example: "twi_speaker_4"
+ *             required:
+ *               - text
+ *     responses:
+ *       200:
+ *         description: Audio conversion successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 audio:
+ *                   type: string
+ *                   description: Base64 encoded audio data
+ *                 format:
+ *                   type: string
+ *                   example: "audio/mpeg"
+ *                 language:
+ *                   type: string
+ *                   example: "tw"
+ *                 speaker_id:
+ *                   type: string
+ *                   example: "twi_speaker_4"
+ *                 text_length:
+ *                   type: number
+ *                   example: 11
+ *       400:
+ *         description: Bad request (missing text or unsupported language)
+ *       500:
+ *         description: Internal server error during TTS conversion
+ */
+uploadRoutes.post('/localizelanguage', localizeLanguage);
+
+/**
+ * @swagger
+ * /upload/solutions-to-audio:
+ *   post:
+ *     summary: Convert plant disease solutions to audio
+ *     description: Takes an array of solution texts and converts them to speech in specified language
+ *     tags:
+ *       - Image
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               solutions:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Array of solution texts to convert
+ *                 example: ["Plant resistant varieties", "Use crop rotation"]
+ *               language:
+ *                 type: string
+ *                 description: Language code for TTS
+ *                 enum: [tw, gaa, dag, yo, ee, ki, ha]
+ *                 default: tw
+ *                 example: tw
+ *               speaker_id:
+ *                 type: string
+ *                 description: Specific speaker ID for the language
+ *                 example: "twi_speaker_4"
+ *             required:
+ *               - solutions
+ *     responses:
+ *       200:
+ *         description: Audio conversion successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 audio:
+ *                   type: string
+ *                   description: Base64 encoded audio data
+ *                 format:
+ *                   type: string
+ *                   example: "audio/mpeg"
+ *                 language:
+ *                   type: string
+ *                   example: "tw"
+ *                 speaker_id:
+ *                   type: string
+ *                   example: "twi_speaker_4"
+ *                 solution_count:
+ *                   type: number
+ *                   example: 2
+ *                 text_length:
+ *                   type: number
+ *                   example: 42
+ *       400:
+ *         description: Bad request (missing solutions or unsupported language)
+ *       500:
+ *         description: Internal server error during TTS conversion
+ */
+uploadRoutes.post('/solutions-to-audio', convertSolutionsToAudio);
+
+
 
 uploadRoutes.use((err, req, res, next) => {
   // Log any error that reaches this middleware
