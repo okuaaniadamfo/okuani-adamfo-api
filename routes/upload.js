@@ -17,14 +17,18 @@ const upload = multer({
       if (!file.mimetype.match(/audio\/(mpeg|wav|ogg|mp3|m4a)/)) {
         return cb(new Error('Only audio files are allowed (MP3, WAV, OGG, M4A)'), false);
       }
+      cb(null, true);
     }
     // For image uploads
     else if (file.fieldname === 'file') {
       if (!file.mimetype.match(/image\/(jpeg|png|jpg|gif)/)) {
         return cb(new Error('Only image files are allowed (JPEG, PNG, JPG, GIF)'), false);
       }
+      cb(null, true);
+    } else {
+      // Reject files with unexpected field names
+      cb(new Error(`Unexpected field name: ${file.fieldname}`), false);
     }
-    cb(null, true);
   }
 });
 
@@ -246,29 +250,35 @@ uploadRoutes.post('/voice', upload.single('audio'), handleVoiceUpload);
  *       500:
  *         description: Internal server error during image processing
  */
-// uploadRoutes.post('/image', upload.single('file'), handleImageUpload);
-uploadRoutes.post('/image', 
-  upload.single('file'),
-  (req, res, next) => {
-    if (!req.file) {
-      return res.status(400).json({ 
-        error: 'No image file uploaded',
-        supportedFormats: ['JPEG', 'PNG', 'JPG', 'GIF']
-      });
-    }
-    console.log('Image file received:', {
-      originalname: req.file.originalname,
-      mimetype: req.file.mimetype,
-      size: req.file.size
-    });
-    next();
-  },
-  handleImageUpload
-);
+uploadRoutes.post('/image', upload.single('file'), handleImageUpload);
+// uploadRoutes.post('/image', 
+//   upload.single('file'),
+//   (req, res, next) => {
+//     if (!req.file) {
+//       return res.status(400).json({ 
+//         error: 'No image file uploaded',
+//         supportedFormats: ['JPEG', 'PNG', 'JPG', 'GIF']
+//       });
+//     }
+//     console.log('Image file received:', {
+//       originalname: req.file.originalname,
+//       mimetype: req.file.mimetype,
+//       size: req.file.size
+//     });
+//     next();
+//   },
+//   handleImageUpload
+// );
 
 
 // Error handling middleware for Multer
+
 uploadRoutes.use((err, req, res, next) => {
+  // Log any error that reaches this middleware
+  if (err) {
+    console.error(`[${new Date().toISOString()}] Error in UPLOAD route [${req.method} ${req.path}]:`, err.message, err.stack || '');
+  }
+
   if (err instanceof multer.MulterError) {
     // A Multer error occurred when uploading
     return res.status(400).json({
@@ -277,7 +287,16 @@ uploadRoutes.use((err, req, res, next) => {
       code: err.code
     });
   } else if (err) {
-    // Other errors
+    // Handle custom errors from fileFilter or other synchronous errors
+    if (err.message.includes('Only audio files are allowed') ||
+        err.message.includes('Only image files are allowed') ||
+        err.message.includes('Unexpected field name')) {
+      return res.status(400).json({
+        error: 'Invalid file type or field',
+        details: err.message
+      });
+    }
+    // For other unhandled errors
     return res.status(500).json({
       error: 'Internal server error',
       details: err.message
@@ -285,6 +304,5 @@ uploadRoutes.use((err, req, res, next) => {
   }
   next();
 });
-
 
 export default uploadRoutes;

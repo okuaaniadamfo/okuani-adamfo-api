@@ -1,15 +1,16 @@
-import dotenv from 'dotenv';
 import express from "express";
 import mongoose from "mongoose";
 import cors from 'cors';
+import dotenv from 'dotenv';
 import uploadRoutes from "./routes/upload.js";
 import diagnoseRoutes from "./routes/diagnose.js";
 import outputRoutes from "./routes/output.js";
 import { swaggerDocs, swaggerUiSetup } from "./config/swagger.js";
 import userRoutes from "./routes/user.js";
+
 dotenv.config();
 
-// Debug: Check if IMAGE_MODEL_URL is loaded
+// Debug environment variables
 console.log('IMAGE_MODEL_URL:', process.env.IMAGE_MODEL_URL);
 console.log('All environment variables:', Object.keys(process.env));
 console.log('GHANA_API_KEY exists:', 'GHANA_API_KEY' in process.env);
@@ -20,9 +21,7 @@ const okuaniadamfoapp = express();
 // Configure CORS
 const allowedOrigins = [
   'https://okuaniadamfo.netlify.app',
-  'http://localhost:5000', // For local development
-  'http://localhost:3000', // For local development
-  'http://127.0.0.1:3000' // Alternative localhost
+  'http://localhost:5000'
 ];
 
 const corsOptions = {
@@ -30,15 +29,19 @@ const corsOptions = {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    if (allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      console.warn(`Blocked by CORS: ${origin}`);
-      callback(new Error('Not allowed by CORS'));
+    if (allowedOrigins.includes(origin) || 
+        origin.endsWith('.netlify.app') || // Allow all Netlify subdomains
+        origin.includes('localhost') ||    // Allow localhost variants
+        origin.includes('127.0.0.1')) {   // Allow direct IP access
+      return callback(null, true);
     }
+    
+    // For other origins, you might want to log them
+    console.warn('Blocked CORS request from origin:', origin);
+    return callback(new Error('Not allowed by CORS'));
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   credentials: true,
   optionsSuccessStatus: 200 // For legacy browser support
 };
@@ -53,6 +56,7 @@ okuaniadamfoapp.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'same-origin');
   next();
 });
 
@@ -79,11 +83,10 @@ const startServer = async () => {
   try {
     await mongoose.connect(process.env.MONGO_URI);
     console.log('MongoDB connected');
-
-    const port = process.env.PORT || 8080;
-    okuaniadamfoapp.listen(port, () => {
-      console.log(`OkuaniAdamfo App listening on port ${port}`);
-      console.log(`CORS allowed for origins: ${allowedOrigins.join(', ')}`);
+    
+    const PORT = process.env.PORT || 5000;
+    okuaniadamfoapp.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
     });
   } catch (err) {
     console.error('MongoDB connection error:', err);

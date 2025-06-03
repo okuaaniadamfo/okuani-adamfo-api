@@ -154,7 +154,7 @@ export const handleImageUpload = async (req, res) => {
     });
 
     // Send to plant disease API
-    const endpoint = `${process.env.IMAGE_MODEL_URL}/predict_image/`;
+    const endpoint = `${process.env.IMAGE_MODEL_URL}/predict/`;
     console.log(`Sending request to: ${endpoint}`);
 
     const response = await axios.post(endpoint, formData, {
