@@ -17,6 +17,7 @@ const okuaniadamfoapp = express();
 //   origin: 'https://okuaniadamfo.netlify.app/',
 //   credentials: true
 // }));
+
 okuaniadamfoapp.use(cors({ origin: '*' }));
 okuaniadamfoapp.use(express.json({ limit: "50mb" }));
 okuaniadamfoapp.use(express.urlencoded({ limit: "50mb", extended: true }));
