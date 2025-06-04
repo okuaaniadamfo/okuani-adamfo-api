@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { handleVoiceUpload, handleImageUpload, getSupportedLanguages,testGhanaNLPConnection, localizeLanguage, convertSolutionsToAudio} from '../controllers/upload.js'
+import sharp from 'sharp';
 
 const uploadRoutes = Router();
 
@@ -13,18 +14,15 @@ const upload = multer({
   },
   fileFilter: (req, file, cb) => {
     if (file.fieldname === 'audio') {
-      if (!file.mimetype.match(/audio\/(mpeg|wav|ogg|mp3|m4a)/)) {
+      if (!/audio\/(mpeg|wav|ogg|mp3|m4a)/.test(file.mimetype)) {
         return cb(new Error('Only audio files are allowed (MP3, WAV, OGG, M4A)'), false);
       }
       cb(null, true);
-    } 
-    else if (file.fieldname === 'file') {
-      if (!file.mimetype.match(/image\/(jpeg|png|jpg|gif)/)) {
+    } else if (file.fieldname === 'file') {
+      if (!/image\/(jpeg|png|jpg|gif)/.test(file.mimetype)) {
         return cb(new Error('Only image files are allowed (JPEG, PNG, JPG, GIF)'), false);
       }
       cb(null, true);
-    } else {
-      cb(new Error(`Unexpected field name: ${file.fieldname}`), false);
     }
   }
 });
@@ -50,34 +48,7 @@ uploadRoutes.use((req, res, next) => {
   next();
 });
 
-// Error handling middleware
-uploadRoutes.use((err, req, res, next) => {
-  console.error(`[${new Date().toISOString()}] Error:`, err.message, err.stack || '');
 
-  if (err instanceof multer.MulterError) {
-    return res.status(400).json({
-      error: 'File upload error',
-      details: err.message,
-      code: err.code
-    });
-  } 
-  
-  // Handle specific error types
-  if (err.message.includes('Only audio files are allowed') ||
-      err.message.includes('Only image files are allowed') ||
-      err.message.includes('Unexpected field name')) {
-    return res.status(400).json({
-      error: 'Invalid file type or field',
-      details: err.message
-    });
-  }
-
-  // For other unhandled errors
-  res.status(500).json({
-    error: 'Internal server error',
-    details: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
-  });
-});
 
 // GET /upload/test-connection - Test Ghana NLP API connectivity
 /**
@@ -236,7 +207,15 @@ uploadRoutes.get('/languages', getSupportedLanguages);
  *                   type: string
  *                   example: "Detailed error message"
  */
-uploadRoutes.post('/voice', upload.single('audio'), handleVoiceUpload);
+uploadRoutes.post('/voice', upload.single('audio'), (req, res, next) => {
+  if (!req.file) {
+    return res.status(400).json({
+      error: 'No audio file uploaded.',
+      supportedFormats: ['MP3', 'WAV', 'OGG', 'M4A']
+    });
+  }
+  next();
+}, handleVoiceUpload);
 
 // POST /upload/image
 /**
@@ -291,31 +270,39 @@ uploadRoutes.post('/voice', upload.single('audio'), handleVoiceUpload);
  *       500:
  *         description: Internal server error during image processing
  */
-uploadRoutes.post('/image', upload.single('file'), handleImageUpload);
-// uploadRoutes.post('/image', 
-//   upload.single('file'),
-//   (req, res, next) => {
-//     if (!req.file) {
-//       return res.status(400).json({ 
-//         error: 'No image file uploaded',
-//         supportedFormats: ['JPEG', 'PNG', 'JPG', 'GIF']
-//       });
-//     }
-//     console.log('Image file received:', {
-//       originalname: req.file.originalname,
-//       mimetype: req.file.mimetype,
-//       size: req.file.size
-//     });
-//     next();
-//   },
-//   handleImageUpload
-// );
+uploadRoutes.post('/image', upload.single('file'), async (req, res, next) => {
+  if (!req.file) {
+    return res.status(400).json({
+      error: 'No image file uploaded.',
+      supportedFormats: ['JPEG', 'PNG', 'JPG', 'GIF']
+    });
+  }
 
+  try {
+    // Use sharp to validate the image
+    const image = sharp(req.file.buffer);
+    const metadata = await image.metadata();
 
-// Error handling middleware for Multer
+    // Example validation checks
+    if (!['jpeg', 'png', 'jpg', 'gif'].includes(metadata.format)) {
+      return res.status(400).json({ error: 'Unsupported image format.' });
+    }
 
+    if (metadata.width < 100 || metadata.height < 100) {
+      return res.status(400).json({ error: 'Image is too small. Minimum size is 100x100 pixels.' });
+    }
 
-// Add these to your uploadRoutes in upload.js routes file
+    // Optional: log metadata for debugging
+    console.log('Image metadata:', metadata);
+
+    next(); // Proceed to handleImageUpload
+
+  } catch (err) {
+    console.error('Image validation failed:', err);
+    return res.status(400).json({ error: 'Invalid image file.' });
+  }
+}, handleImageUpload);
+
 
 /**
  * @swagger
@@ -386,9 +373,9 @@ uploadRoutes.post('/localizelanguage', localizeLanguage);
  * /upload/solutions-to-audio:
  *   post:
  *     summary: Convert plant disease solutions to audio
- *     description: Takes an array of solution texts and converts them to speech in specified language
+ *     description: Takes an array of solution texts and converts them to speech in the specified language.
  *     tags:
- *       - Image
+ *       - Audio
  *     requestBody:
  *       required: true
  *       content:
@@ -400,23 +387,14 @@ uploadRoutes.post('/localizelanguage', localizeLanguage);
  *                 type: array
  *                 items:
  *                   type: string
- *                 description: Array of solution texts to convert
- *                 example: ["Plant resistant varieties", "Use crop rotation"]
+ *                 example: ["Use neem oil", "Apply fungicide every 7 days"]
  *               language:
  *                 type: string
- *                 description: Language code for TTS
  *                 enum: [tw, gaa, dag, yo, ee, ki, ha]
- *                 default: tw
  *                 example: tw
- *               speaker_id:
- *                 type: string
- *                 description: Specific speaker ID for the language
- *                 example: "twi_speaker_4"
- *             required:
- *               - solutions
  *     responses:
  *       200:
- *         description: Audio conversion successful
+ *         description: Successfully converted all solutions to audio
  *         content:
  *           application/json:
  *             schema:
@@ -425,31 +403,52 @@ uploadRoutes.post('/localizelanguage', localizeLanguage);
  *                 success:
  *                   type: boolean
  *                   example: true
- *                 audio:
- *                   type: string
- *                   description: Base64 encoded audio data
- *                 format:
- *                   type: string
- *                   example: "audio/mpeg"
- *                 language:
- *                   type: string
- *                   example: "tw"
- *                 speaker_id:
- *                   type: string
- *                   example: "twi_speaker_4"
- *                 solution_count:
- *                   type: number
- *                   example: 2
- *                 text_length:
- *                   type: number
- *                   example: 42
+ *                 audios:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       text:
+ *                         type: string
+ *                       audio:
+ *                         type: string
+ *                         description: Base64 encoded audio data
  *       400:
- *         description: Bad request (missing solutions or unsupported language)
+ *         description: Bad request (missing or invalid solutions array)
  *       500:
- *         description: Internal server error during TTS conversion
+ *         description: Internal server error
  */
 uploadRoutes.post('/solutions-to-audio', convertSolutionsToAudio);
 
+
+
+
+// error-handling middleware
+uploadRoutes.use((err, req, res, next) => {
+  console.error(`[${new Date().toISOString()}] Error:`, err.message, err.stack || '');
+
+  if (err instanceof multer.MulterError) {
+    return res.status(400).json({
+      error: 'File upload error',
+      details: err.message,
+      code: err.code
+    });
+  }
+
+  if (err.message.includes('Only audio files are allowed') ||
+      err.message.includes('Only image files are allowed') ||
+      err.message.includes('Unexpected field name')) {
+    return res.status(400).json({
+      error: 'Invalid file type or field',
+      details: err.message
+    });
+  }
+
+  res.status(500).json({
+    error: 'Internal server error',
+    details: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
+  });
+});
 
 
 export default uploadRoutes;
