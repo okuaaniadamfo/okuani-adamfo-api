@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { handleVoiceUpload, handleImageUpload, getSupportedLanguages,testGhanaNLPConnection, localizeLanguage, convertSolutionsToAudio} from '../controllers/upload.js'
+import { handleVoiceUpload, handleImageUpload, getSupportedLanguages,testGhanaNLPConnection, localizeLanguage, convertSolutionsToAudio, uploadText } from '../controllers/upload.js'
 import sharp from 'sharp';
 
 const uploadRoutes = Router();
@@ -421,6 +421,74 @@ uploadRoutes.post('/localizelanguage', localizeLanguage);
 uploadRoutes.post('/solutions-to-audio', convertSolutionsToAudio);
 
 
+/**
+ * @swagger
+ * /upload/translate-text:
+ *   post:
+ *     summary: Translate text from one language to another
+ *     description: Translates input text to the specified target language using Ghana NLP translation API.
+ *     tags:
+ *       - Translation
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               text:
+ *                 type: string
+ *                 description: The original text to translate
+ *                 example: "Hello, how are you?"
+ *               sourceLang:
+ *                 type: string
+ *                 description: Language code of the original text (optional)
+ *                 example: en
+ *               targetLang:
+ *                 type: string
+ *                 description: Language code to translate the text into
+ *                 enum: [tw, gaa, dag, yo, ee, ki, ha]
+ *                 example: tw
+ *             required:
+ *               - text
+ *               - targetLang
+ *     responses:
+ *       200:
+ *         description: Translation successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 translatedText:
+ *                   type: string
+ *                   example: "Wo ho te sɛn?"
+ *       400:
+ *         description: Bad request - missing parameters or unsupported language
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: "Missing required field: text"
+ *       500:
+ *         description: Internal server error during translation
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: "Translation service failed"
+ */
+uploadRoutes.post('/translate-text', uploadText);
+
+
+
+
 
 
 // error-handling middleware
@@ -446,7 +514,7 @@ uploadRoutes.use((err, req, res, next) => {
 
   res.status(500).json({
     error: 'Internal server error',
-    details: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
+    details: process.env.NODE_ENV === 'production' ? err.message : 'Something went wrong'
   });
 });
 

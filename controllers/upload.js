@@ -6,12 +6,6 @@ import 'dotenv/config';
 // Initialize the GhanaNLP client
 const ghanaNLPClient = new GhanaNLP(process.env.GHANA_API_KEY);
 
-// const apiKey = process.env.GHANA_API_KEY || '816b752141044d96975ac20f3f0bd101';
-// console.log('Using API key:', apiKey);
-// const ghanaNLPClient = new GhanaNLP(apiKey);
-// console.log('GHANA_API_KEY at controller:', process.env.GHANA_API_KEY);
-
-
 // Supported languages mapping
 const supportedLanguages = {
   tw: 'Twi',
@@ -326,11 +320,6 @@ export const localizeLanguage = async (req, res) => {
 
 
 /**
- * Converts plant disease solutions to audio in specified language
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- */
-/**
  * Converts plant disease solutions from image prediction to audio
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
@@ -436,6 +425,81 @@ export const convertSolutionsToAudio = async (req, res) => {
     });
   }
 };
+
+
+/**
+ * Translates input English text into selected Ghanaian language using GhanaNLP API
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+export const uploadText = async (req, res) => {
+  try {
+    const { text, targetLanguage } = req.body;
+
+    // Validate input
+    if (!text || !targetLanguage) {
+      return res.status(400).json({
+        error: 'Missing required fields',
+        message: 'Both "text" and "targetLanguage" (e.g. tw, gaa, dag, ee) are required.'
+      });
+    }
+
+    // Validate language is supported
+    if (!supportedLanguages[targetLanguage]) {
+      return res.status(400).json({
+        error: `Unsupported target language: ${targetLanguage}`,
+        supportedLanguages,
+        message: 'Please use one of the supported language codes'
+      });
+    }
+
+    // Prepare payload for the GhanaNLP translation API
+    const body = {
+      in: text,
+      lang: `en-${targetLanguage}`
+    };
+
+    console.log(`Translating text: "${text}" -> ${body.lang}`);
+
+    // Make POST request to the GhanaNLP translation API
+ 
+    const response = await fetch('https://translation-api.ghananlp.org/v1/translate', {
+    method: 'POST',
+    body: JSON.stringify(body),
+    headers: {
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-cache',
+    'Ocp-Apim-Subscription-Key': process.env.GHANA_API_KEY
+      }
+    });
+    // Handle non-successful responses
+    if (!response.ok) {
+      const errorData = await response.json();
+      return res.status(response.status).json({
+        error: 'Translation API Error',
+        details: errorData
+      });
+    }
+
+    const translatedText = await response.text(); // API returns plain string
+
+    return res.status(200).json({
+      originalText: text,
+      translatedText,
+      targetLanguage: supportedLanguages[targetLanguage],
+      langCode: targetLanguage
+    });
+
+  } catch (error) {
+    console.error('Translation error:', error);
+    return res.status(500).json({
+      error: 'Translation failed',
+      message: error.message || 'Unknown error occurred'
+    });
+  }
+};
+
+
 
 // Get Supported Languages
 export const getSupportedLanguages = async (req, res) => {

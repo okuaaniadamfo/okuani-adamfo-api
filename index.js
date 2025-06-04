@@ -15,7 +15,8 @@ const okuaniadamfoapp = express();
 //  CORS setup: only allow Netlify frontend in production
 const allowedOrigins = [
   'https://okuaniadamfo.netlify.app', //  Your frontend
-  'http://localhost:5173',            //  Dev frontend (optional)
+  'http://localhost:5173',            //  Dev frontend 
+  'https://okuani-adamfo-api.onrender.com'//  Dev Backend 
 ];
 
 okuaniadamfoapp.use(cors({
